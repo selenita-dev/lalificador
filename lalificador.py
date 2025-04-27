@@ -26,11 +26,25 @@ def format_filename(file_path, fecha, prefijo):
     ext = file_path.suffix.lower()
     base = name
 
+    pattern = re.compile(
+        r"^\d{4}-\d{2}\s"               # Fecha YYYY-MM espacio
+        r"\d{3}\.\s"                    # Número 3 dígitos y punto espacio
+        r"([A-Z][a-z0-9]*_)*"           # Palabras con guiones bajos (cero o más)
+        r"[A-Z][a-z0-9]*\s"             # Última palabra (sin guión bajo al final), espacio
+        r"(\([^)]+\)\s)?"               # Comentario opcional entre paréntesis, espacio
+        r"(F\.[A-Za-z0-9]{1,5}\s)?"     # Código F.XXXXX opcional, espacio
+        r"[A-Z0-9]{2,}$"                # Prefijo final obligatorio
+    )
+
+    match = pattern.match(name)
+
+    if match: return name + ext
+
     match = re.match(r"^([0-9]{1,3})\.\s*(.*)$", name)
     if not match:
         clean = re.sub(r"[0-9]{4}-[0-9]{2}|" + re.escape(prefijo), "", name, flags=re.IGNORECASE)
         clean = re.sub(r"\s+", " ", clean).strip()
-        return f"{clean} {fecha} {prefijo.upper()}{ext}"
+        return f"{fecha} {clean} {prefijo.upper()}{ext}"
 
     raw_num, rest = match.groups()
     num = f"{int(raw_num):03d}"
@@ -56,12 +70,11 @@ def format_filename(file_path, fecha, prefijo):
     libre = re.sub(r"[^\w]+", " ", libre).strip()
     libre = re.sub(r"\s+", " ", libre).title().replace(" ", "_")
 
-    parts = [f"{num}. {libre}".strip("._")]
+    parts = [f"{fecha} {num}. {libre}".strip("._")]
     if parentesis:
         parts.append(parentesis)
     if fcode:
         parts.append(fcode)
-    parts.append(fecha)
     parts.append(prefijo.upper())
     return " ".join(parts) + ext
 
@@ -133,18 +146,25 @@ def run_gui():
     def mostrar_ejemplos():
         ejemplos = (
             "Ejemplos del patrón válido:\n\n"
-            "➡ 35. Agua (06 Bim 2024).pdf\n"
-            "➡ 35. Agua Pago (06 Bim 2024).pdf\n"
-            "➡ 35. Agua (06 Bim 2024) F.0354.PDF\n"
-            "➡ 2. Asociacion Hoteles y Moteles VM F.A450.xml\n"
-            "\nTodos los nombres se transformarán a este estilo:\n"
-            "✅ 035. Agua (06 Bim 2024) F.00354 2025-03 HBO.pdf\n"
-            "✅ 002. Asociacion_Hoteles_Y_Moteles_VM F.0A450 2025-03 HBO.xml"  
+            "- 35. Agua (06 Bim 2024).pdf\n"
+            "- 35. Agua Pago (06 Bim 2024).pdf\n"
+            "- 35.Agua (06 Bim casa) Pago.pdf\n"
+            "- 35. Agua (06 Bim 2024) F.0354.PDF\n"
+            "- 01. Digital server (06 Bim 2024) F.114.PDF\n"
+            "- 2. Asociacion Hoteles y Moteles VM F.A450.xml\n"
+            "\nPor partes esperadas:\n\n"
+            "- Número de 1 a 3 dígitos seguido de un punto. Ej: 01.\n"
+            "- Texto libre, puede ir en diferentes partes del nombre del archivo.\n"
+            "- Comentario entre paréntesis (opcional).\n"
+            "- Código de factura, siempre con 'F.', F.XXXXX (opcional).\n"
+            "\nTodos los nombres se transformarán a este patrón:\n"
+            "- 2025-03 035. Agua (06 Bim 2024) F.00354 HBO.pdf\n"
+            "- 2025-03 002. Asociacion_Hoteles_Y_Moteles_VM F.0A450 HBO.xml"  
         )
 
         top = tk.Toplevel()
         top.title("Ejemplos de nombre válido")
-        top.geometry("600x300")
+        top.geometry("800x600")
 
         text = tk.Text(top, wrap="word", font=("Consolas", 11))
         text.insert("1.0", ejemplos)
@@ -188,7 +208,7 @@ def run_gui():
     ttk.Entry(frame, textvariable=siglas_var, width=20).grid(row=1, column=1, padx=5, sticky="w")
 
     ttk.Label(frame, text="Patrón esperado:").grid(row=2, column=0, sticky="w")
-    ttk.Label(frame, text="001. Texto_Libre (Paréntesis) F.XXXXX AAAA-MM SIGLAS.ext").grid(row=2, column=1, padx=5, sticky="w")
+    ttk.Label(frame, text="1. Texto libre (comentario) mas texto libre F.XXXXX.ext").grid(row=2, column=1, padx=5, sticky="w")
     ttk.Button(frame, text="📘 Ver Ejemplos", command=mostrar_ejemplos).grid(row=2, column=2, padx=5)
 
     ttk.Button(frame, text="🔍 Analizar", command=ejecutar).grid(row=3, column=0, pady=10)
