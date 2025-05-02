@@ -1,5 +1,6 @@
 import os
 import re
+import subprocess
 import sys
 import platform
 import shutil
@@ -11,7 +12,6 @@ from tkinter import filedialog, messagebox, ttk
 SIGLAS_DEFAULT = "XXX"
 FILES_TO_RENAME = []
 
-
 def get_directory_date_from_file(file_path):
     parent_name = file_path.parent.name
     match = re.match(r"(\d{4})\.(\d{2})", parent_name)
@@ -20,30 +20,30 @@ def get_directory_date_from_file(file_path):
     else:
         return datetime.now().strftime("%Y-%m")
 
-
 def format_filename(file_path, fecha, prefijo):
     name = file_path.stem
     ext = file_path.suffix.lower()
-    base = name
 
     pattern = re.compile(
         r"^\d{4}-\d{2}\s"               # Fecha YYYY-MM espacio
         r"\d{3}\.\s"                    # Número 3 dígitos y punto espacio
-        r"([A-Z][a-z0-9]*_)*"           # Palabras con guiones bajos (cero o más)
-        r"[A-Z][a-z0-9]*\s"             # Última palabra (sin guión bajo al final), espacio
-        r"(\([^)]+\)\s)?"               # Comentario opcional entre paréntesis, espacio
+        r"([A-Z][a-z0-9]*\s)+"          # Palabras CapitalCase sin guiones bajos
+        r"(\([^\s()][^()]*[^\s()]\) )?" # Comentario opcional entre paréntesis, espacio
         r"(F\.[A-Za-z0-9]{1,5}\s)?"     # Código F.XXXXX opcional, espacio
-        r"[A-Z0-9]{2,}$"                # Prefijo final obligatorio
+        r"[A-Z]{2,}$"                   # Prefijo final obligatorio
     )
 
     match = pattern.match(name)
 
     if match: return name + ext
 
-    match = re.match(r"^([0-9]{1,3})\.\s*(.*)$", name)
+    # Eliminar fecha y prefijo del texto libre
+    clean = re.sub(r"[0-9]{4}-[0-9]{2}|" + re.escape(prefijo), "", name, flags=re.IGNORECASE)
+    clean = re.sub(r"\s+", " ", clean).strip()
+
+    # Obtener el numero del archivo
+    match = re.match(r"^([0-9]{1,3})\.\s*(.*)$", clean)
     if not match:
-        clean = re.sub(r"[0-9]{4}-[0-9]{2}|" + re.escape(prefijo), "", name, flags=re.IGNORECASE)
-        clean = re.sub(r"\s+", " ", clean).strip()
         return f"{fecha} {clean} {prefijo.upper()}{ext}"
 
     raw_num, rest = match.groups()
@@ -68,7 +68,7 @@ def format_filename(file_path, fecha, prefijo):
     libre = re.sub(r"\([^)]*\)", "", rest)
     libre = re.sub(r"[0-9]{4}-[0-9]{2}|" + re.escape(prefijo), "", libre, flags=re.IGNORECASE)
     libre = re.sub(r"[^\w]+", " ", libre).strip()
-    libre = re.sub(r"\s+", " ", libre).title().replace(" ", "_")
+    libre = re.sub(r"\s+", " ", libre).title().replace("_", " ")
 
     parts = [f"{fecha} {num}. {libre}".strip("._")]
     if parentesis:
@@ -159,7 +159,9 @@ def run_gui():
             "- Código de factura, siempre con 'F.', F.XXXXX (opcional).\n"
             "\nTodos los nombres se transformarán a este patrón:\n"
             "- 2025-03 035. Agua (06 Bim 2024) F.00354 HBO.pdf\n"
-            "- 2025-03 002. Asociacion_Hoteles_Y_Moteles_VM F.0A450 HBO.xml"  
+            "- 2025-03 035. Agua Pago (06 Bim 2024) F.00354 HBO.pdf\n"
+            "- 2025-03 001. Digital Server (06 Bim 2024) F.00114.pdf\n"
+            "- 2025-03 002. Asociacion Hoteles Y Moteles VM F.0A450 HBO.xml"  
         )
 
         top = tk.Toplevel()
@@ -199,20 +201,32 @@ def run_gui():
             apply_changes()
             ejecutar()
 
+    def abrir_directorio():
+        if not dir_var.get():
+            messagebox.showerror("Error", "Selecciona un directorio primero.")
+            return
+        if platform.system() == "Windows":
+            os.startfile(dir_var.get())
+        elif platform.system() == "Darwin":  # macOS
+            subprocess.run(["open", dir_var.get()])
+        else:  # Linux y derivados
+            subprocess.run(["xdg-open", dir_var.get()])
+
     ttk.Label(frame, text="Directorio:").grid(row=0, column=0, sticky="w")
     dir_entry = ttk.Entry(frame, textvariable=dir_var, width=60)
-    dir_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-    ttk.Button(frame, text="📂 Seleccionar", command=seleccionar_directorio).grid(row=0, column=2, padx=5)
+    dir_entry.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
+    ttk.Button(frame, text="📂 Seleccionar", command=seleccionar_directorio).grid(row=0, column=2, padx=10, sticky="ew")
 
     ttk.Label(frame, text="Siglas:").grid(row=1, column=0, sticky="w")
-    ttk.Entry(frame, textvariable=siglas_var, width=20).grid(row=1, column=1, padx=5, sticky="w")
+    ttk.Entry(frame, textvariable=siglas_var, width=20).grid(row=1, column=1, padx=10, sticky="w")
 
     ttk.Label(frame, text="Patrón esperado:").grid(row=2, column=0, sticky="w")
-    ttk.Label(frame, text="1. Texto libre (comentario) mas texto libre F.XXXXX.ext").grid(row=2, column=1, padx=5, sticky="w")
-    ttk.Button(frame, text="📘 Ver Ejemplos", command=mostrar_ejemplos).grid(row=2, column=2, padx=5)
+    ttk.Label(frame, text="1. Texto libre (comentario) mas texto libre F.XXXXX.ext").grid(row=2, column=1, padx=10, sticky="w")
+    ttk.Button(frame, text="📘 Ver Ejemplos", command=mostrar_ejemplos).grid(row=2, column=2, padx=10, sticky="ew")
 
-    ttk.Button(frame, text="🔍 Analizar", command=ejecutar).grid(row=3, column=0, pady=10)
-    ttk.Button(frame, text="✅ Aplicar Cambios", command=confirmar).grid(row=3, column=1, pady=10, sticky="w")
+    ttk.Button(frame, text="🔍 Analizar", command=ejecutar).grid(row=3, column=0, pady=10, padx=10, sticky="ew")
+    ttk.Button(frame, text="✅ Aplicar Cambios", command=confirmar).grid(row=3, column=1, pady=10, padx=10, sticky="ew")
+    ttk.Button(frame, text="📂 Abrir directorio", command=abrir_directorio).grid(row=3, column=2, pady=10, padx=10, sticky="ew")
 
     text_frame = ttk.Frame(frame)
     text_frame.grid(row=4, column=0, columnspan=3, sticky="nsew")
